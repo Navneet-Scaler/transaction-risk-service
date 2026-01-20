@@ -12,25 +12,52 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      # 1️⃣ Checkout source (for k8s manifests only)
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up kubectl
+      # 2️⃣ Install kubectl (stable + supported)
+      - name: Setup kubectl
         uses: azure/setup-kubectl@v3
         with:
-          version: 'v1.30.0'
+          version: v1.29.0
 
-      - name: Configure Kubernetes context
+      # 3️⃣ Configure Kubernetes access securely
+      - name: Configure kubeconfig
         run: |
           mkdir -p ~/.kube
           echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
 
-      - name: Deploy to Kubernetes
+      # 4️⃣ Create DockerHub image pull secret
+      - name: Create DockerHub imagePullSecret
         run: |
-          sed -i "s|DOCKERHUB_USERNAME|${{ secrets.DOCKERHUB_USERNAME }}|g" k8s/deployment.yml
-          kubectl apply -f k8s/ --validate=false
+          kubectl create secret docker-registry dockerhub-secret \
+            --docker-username=${{ secrets.DOCKERHUB_USERNAME }} \
+            --docker-password=${{ secrets.DOCKERHUB_TOKEN }} \
+            --docker-server=https://index.docker.io/v1/ \
+            --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Verify deployment
+      # 5️⃣ Deploy application to Kubernetes
+      - name: Deploy application
         run: |
-          kubectl rollout status deployment/transaction-risk-service
+          kubectl apply -f k8s/
+
+      # 6️⃣ Verify rollout (mandatory production gate)
+      - name: Verify deployment rollout
+        run: |
+          kubectl rollout status deployment/transaction-risk-service --timeout=120s
           kubectl get pods
+
+      # 7️⃣ Dummy DAST / Runtime validation (guideline requirement)
+      - name: Runtime health validation
+        run: |
+          SERVICE_IP=$(kubectl get svc transaction-risk-service \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+
+          if [ -z "$SERVICE_IP" ]; then
+            echo "Service IP not available yet"
+            exit 1
+          fi
+
+          curl -f http://$SERVICE_IP/actuator/health
