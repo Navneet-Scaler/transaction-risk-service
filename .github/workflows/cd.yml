@@ -22,12 +22,26 @@ jobs:
         with:
           version: v1.29.0
 
-      # 3️⃣ Configure Kubernetes context securely
+      # 3️⃣ Configure Kubernetes context securely (handles raw or base64-encoded kubeconfig)
       - name: Configure kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+          set -euo pipefail
+          # Try to decode KUBE_CONFIG if it's base64, otherwise write raw content.
+          if printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 --decode >/dev/null 2>&1; then
+            printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 --decode > ~/.kube/config
+          else
+            printf '%s' "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+          fi
           chmod 600 ~/.kube/config
+          echo "kubectl client version:"
+          kubectl version --client --short || true
+          echo "Checking cluster access..."
+          if ! kubectl cluster-info >/dev/null 2>&1; then
+            echo "ERROR: Unable to contact the Kubernetes API server. Dumping kubeconfig (for debugging only):"
+            sed -n '1,200p' ~/.kube/config || true
+            exit 1
+          fi
 
       # 4️⃣ Create / update DockerHub imagePullSecret
       - name: Create DockerHub image pull secret
