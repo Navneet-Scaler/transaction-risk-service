@@ -1,4 +1,4 @@
-package com.example.transaction_risk_service;
+package com.example.transactionriskservice;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

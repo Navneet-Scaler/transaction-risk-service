@@ -1,4 +1,4 @@
-package com.example.transaction_risk_service;
+package com.example.transactionriskservice;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
