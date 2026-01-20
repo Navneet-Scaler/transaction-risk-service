@@ -1,8 +1,7 @@
 name: CI Pipeline
 
 on:
-  push:
-    branches: [ "main" ]
+  push:           # run on pushes to any branch
   workflow_dispatch:
 
 jobs:
@@ -51,7 +50,8 @@ jobs:
       # 8. Build Docker image
       - name: Build Docker image
         run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/transaction-risk-service:latest .
+          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/transaction-risk-service:latest
+          docker build -t "${IMAGE}" .
 
       # 9. Scan Docker image with Trivy
       - name: Scan Docker image with Trivy
@@ -66,10 +66,12 @@ jobs:
       # 10. Runtime smoke test
       - name: Run container for smoke test
         run: |
-          docker run -d -p 8080:8080 --name risk-app \
-            ${{ secrets.DOCKERHUB_USERNAME }}/transaction-risk-service:latest
+          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/transaction-risk-service:latest
+          docker run -d -p 8080:8080 --name risk-app "${IMAGE}"
           sleep 15
           curl -f http://localhost:8080/actuator/health
+          docker stop risk-app || true
+          docker rm risk-app || true
 
       # 11. Login to DockerHub
       - name: DockerHub login
@@ -81,4 +83,5 @@ jobs:
       # 12. Push image to DockerHub
       - name: Push Docker image
         run: |
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/transaction-risk-service:latest
+          IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/transaction-risk-service:latest
+          docker push "${IMAGE}"

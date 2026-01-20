@@ -71,19 +71,33 @@ jobs:
           | kubectl apply --validate=false -f -
 
       # 5️⃣ Deploy application manifests
-      - name: Deploy to Kubernetes
+      - name: Render k8s manifests with DockerHub username and apply
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
-          kubectl apply --validate=false -f k8s/
+          set -euo pipefail
+          # replace placeholder in deployment.yml with the DockerHub username
+          sed "s|<YOUR_DOCKERHUB_USERNAME>|${DOCKERHUB_USERNAME}|g" k8s/deployment.yml > k8s/deployment.rendered.yml
+          # apply rendered deployment and any other manifests
+          kubectl apply --validate=false -f k8s/deployment.rendered.yml
+          # apply remaining manifests if present
+          if [ -d k8s ] && ls k8s/*.yml 1>/dev/null 2>&1; then
+            for f in k8s/*.yml; do
+              if [ "$f" != "k8s/deployment.rendered.yml" ]; then
+                kubectl apply --validate=false -f "$f"
+              fi
+            done
+          fi
 
       # 6️⃣ Verify deployment rollout
       - name: Verify rollout
         run: |
           kubectl rollout status deployment/transaction-risk-service --timeout=120s
-          kubectl get pods
+          kubectl get pods -o wide
 
       # 7️⃣ Runtime validation (dummy DAST)
       - name: Runtime health check
         run: |
-          kubectl port-forward svc/transaction-risk-service 8080:80 &
+          kubectl port-forward svc/transaction-risk-service 8080:8080 &
           sleep 10
           curl -f http://localhost:8080/actuator/health
