@@ -9,6 +9,10 @@ jobs:
   build-test-scan:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
       # 1. Checkout source code
       - name: Checkout code
@@ -26,7 +30,7 @@ jobs:
       - name: Run unit tests
         run: mvn test
 
-      # 4. Build application
+      # 4. Build application JAR
       - name: Build JAR
         run: mvn clean package -DskipTests
 
@@ -36,16 +40,20 @@ jobs:
         with:
           languages: java
 
-      # 6. Perform CodeQL analysis
+      # 6. Build project FOR CodeQL (MANDATORY FOR JAVA)
+      - name: Build for CodeQL
+        run: mvn clean compile
+
+      # 7. Perform CodeQL analysis
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-      # 7. Build Docker image
+      # 8. Build Docker image
       - name: Build Docker image
         run: |
           docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/transaction-risk-service:latest .
 
-      # 8. Scan Docker image with Trivy
+      # 9. Scan Docker image with Trivy
       - name: Scan Docker image with Trivy
         uses: aquasecurity/trivy-action@0.24.0
         with:
@@ -55,22 +63,22 @@ jobs:
           vuln-type: os,library
           severity: CRITICAL,HIGH
 
-      # 9. Runtime smoke test
+      # 10. Runtime smoke test
       - name: Run container for smoke test
         run: |
           docker run -d -p 8080:8080 --name risk-app \
-          ${{ secrets.DOCKERHUB_USERNAME }}/transaction-risk-service:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/transaction-risk-service:latest
           sleep 15
           curl -f http://localhost:8080/actuator/health
 
-      # 10. Login to DockerHub
+      # 11. Login to DockerHub
       - name: DockerHub login
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 11. Push image to DockerHub
+      # 12. Push image to DockerHub
       - name: Push Docker image
         run: |
           docker push ${{ secrets.DOCKERHUB_USERNAME }}/transaction-risk-service:latest
