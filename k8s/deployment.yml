@@ -15,7 +15,7 @@ spec:
         app: transaction-risk
     spec:
       imagePullSecrets:
-        - name: dockerhub-secret   # 🔐 DockerHub auth
+        - name: dockerhub-secret
       containers:
         - name: transaction-risk
           image: <YOUR_DOCKERHUB_USERNAME>/transaction-risk-service:latest
