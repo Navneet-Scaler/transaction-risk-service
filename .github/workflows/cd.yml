@@ -22,24 +22,41 @@ jobs:
         with:
           version: v1.29.0
 
-      # 3️⃣ Configure Kubernetes context securely (handles raw or base64-encoded kubeconfig)
+      # 3️⃣ Configure Kubernetes context securely (handles KUBE_CONFIG or KUBECONFIG, raw or base64)
       - name: Configure kubeconfig
+        env:
+          KUBE_CONFIG_SECRET: ${{ secrets.KUBE_CONFIG || '' }}
+          KUBECONFIG_SECRET: ${{ secrets.KUBECONFIG || '' }}
         run: |
           mkdir -p ~/.kube
           set -euo pipefail
-          # Try to decode KUBE_CONFIG if it's base64, otherwise write raw content.
-          if printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 --decode >/dev/null 2>&1; then
-            printf '%s' "${{ secrets.KUBE_CONFIG }}" | base64 --decode > ~/.kube/config
+
+          # Prefer KUBE_CONFIG, fallback to KUBECONFIG
+          if [ -n "${KUBE_CONFIG_SECRET}" ]; then
+            K_CFG="${KUBE_CONFIG_SECRET}"
+          elif [ -n "${KUBECONFIG_SECRET}" ]; then
+            K_CFG="${KUBECONFIG_SECRET}"
           else
-            printf '%s' "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+            echo "ERROR: No kubeconfig secret found. Set KUBE_CONFIG or KUBECONFIG in repository secrets."
+            exit 1
+          fi
+
+          # Try to detect base64 and decode, otherwise write raw
+          if printf '%s' "$K_CFG" | base64 --decode >/dev/null 2>&1; then
+            printf '%s' "$K_CFG" | base64 --decode > ~/.kube/config
+          else
+            printf '%s' "$K_CFG" > ~/.kube/config
           fi
           chmod 600 ~/.kube/config
+
           echo "kubectl client version:"
           kubectl version --client --short || true
+
           echo "Checking cluster access..."
           if ! kubectl cluster-info >/dev/null 2>&1; then
-            echo "ERROR: Unable to contact the Kubernetes API server. Dumping kubeconfig (for debugging only):"
-            sed -n '1,200p' ~/.kube/config || true
+            echo "ERROR: Unable to contact the Kubernetes API server."
+            echo "Kubeconfig server entries (no secrets printed):"
+            grep -E "server:" -n ~/.kube/config || true
             exit 1
           fi
 
